@@ -1,0 +1,44 @@
+{
+  "name": "printable-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "dev": "next dev --turbopack",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@auth/drizzle-adapter": "^1.8.0",
+    "@clerk/nextjs": "^6.15.0",
+    "@heroicons/react": "^2.2.0",
+    "@neondatabase/serverless": "^0.10.4",
+    "axios": "^1.9.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "dotenv": "^16.4.7",
+    "drizzle-orm": "^0.40.0",
+    "framer-motion": "^12.9.4",
+    "lucide-react": "^0.488.0",
+    "next": "^15.3.1",
+    "radix-ui": "^1.2.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-dropzone": "^14.3.8",
+    "react-icons": "^5.5.0",
+    "react-pdf": "^9.2.1",
+    "svix": "^1.61.3",
+    "swagger-ui-react": "^5.21.0",
+    "tailwind-animate": "^0.2.10",
+    "tailwind-merge": "^3.2.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20.17.32",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "drizzle-kit": "^0.30.5",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
