@@ -1,28 +1,38 @@
-'use client';
-import { useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+"use client";
+import { useSearchParams, useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import { useFileContext } from "../pdfcompress/FileContext";
 
 export default function UploadPage() {
   const searchParams = useSearchParams();
-  const fileName = searchParams.get('name') || 'document.pdf';
-  const fileSize = searchParams.get('size') || '0 MB';
+  const router = useRouter();
+  const fileNameParam = searchParams.get("name") || "document.pdf";
+  const fileSizeParam = searchParams.get("size") || "0 MB";
+
+  // Retrieve the actual file from context.
+  const { file, setFile } = useFileContext();
+
   const [progress, setProgress] = useState(0);
+  // New state to mark when the upload animation is complete.
+  const [uploadComplete, setUploadComplete] = useState(false);
   const [convertingProgress, setConvertingProgress] = useState(0);
   const [showResultImages, setShowResultImages] = useState(false);
   const [showProgressBar, setShowProgressBar] = useState(true);
   const [showConvertingProgress, setShowConvertingProgress] = useState(false);
   const [showWordImage, setShowWordImage] = useState(false);
   const [showRightPanel, setShowRightPanel] = useState(true);
-  const [selectedCompression, setSelectedCompression] = useState('');
-  const [compressClicked, setCompressClicked] = useState(false);
+  const [selectedCompression, setSelectedCompression] = useState("");
 
-  const docxFileName = `${fileName.split('.')[0]}.docx`;
+  const docxFileName = `${fileNameParam.split(".")[0]}.docx`;
 
+  // Simulate upload progress.
   useEffect(() => {
     const uploadInterval = setInterval(() => {
       setProgress((prev) => {
         if (prev >= 100) {
           clearInterval(uploadInterval);
+          setShowProgressBar(false);
+          setUploadComplete(true);
           return 100;
         }
         return prev + 5;
@@ -32,28 +42,98 @@ export default function UploadPage() {
   }, []);
 
   useEffect(() => {
-    if (compressClicked) {
-      const convertInterval = setInterval(() => {
-        setConvertingProgress((prev) => {
-          if (prev >= 100) {
-            clearInterval(convertInterval);
-            setShowWordImage(true);
-            return 100;
-          }
-          return prev + 5;
-        });
-      }, 300);
-      return () => clearInterval(convertInterval);
+    if (!file) {
+      alert("No file found. Please upload again.");
+      router.replace("/pdfcompress");
     }
-  }, [compressClicked]);
+  }, [file, router]);
 
+  // This function handles calling the compression API and triggers the download.
+  const handleCompression = async () => {
+  if (!file) {
+    alert("No file available. Please go back and upload again.");
+    return;
+  }
+
+  console.log("File to compress:", file);
+
+  try {
+    setShowResultImages(true);
+    setShowConvertingProgress(true);
+    setShowRightPanel(false);
+
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append(
+      "optimizeLevel",
+      selectedCompression === "extreme"
+        ? "7"
+        : selectedCompression === "recommended"
+        ? "5"
+        : "3"
+    );
+
+    const progressInterval = setInterval(() => {
+      setConvertingProgress((prev) => Math.min(prev + 10, 90));
+    }, 500);
+
+    const response = await fetch("/api/pdfcompress", {
+      method: "POST",
+      body: formData,
+    });
+
+    clearInterval(progressInterval);
+
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+
+    // Get filename from Content-Disposition header if present
+    let filename = `compressed-${file.name}`;
+    const disposition = response.headers.get("Content-Disposition");
+    if (disposition && disposition.includes("filename=")) {
+      const match = disposition.match(/filename="?([^"]+)"?/);
+      if (match && match[1]) filename = match[1];
+    }
+
+    const blob = await response.blob();
+    if (!blob.size) {
+      throw new Error("Received empty file from server");
+    }
+
+    setConvertingProgress(100);
+    setShowWordImage(true);
+
+    // Use a more robust download method
+    const blobUrl = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.style.display = "none";
+    a.href = blobUrl;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      window.URL.revokeObjectURL(blobUrl);
+      document.body.removeChild(a);
+    }, 200);
+
+    setFile(null);
+  } catch (err) {
+    alert(err instanceof Error ? err.message : "Failed to compress PDF");
+    setConvertingProgress(0);
+    setShowConvertingProgress(false);
+    setShowResultImages(false);
+    setShowProgressBar(true);
+    setShowRightPanel(true);
+  }
+};
+
+  // This handler is triggered by the "Compress PDF" button.
   const handleCompressClick = () => {
     if (selectedCompression) {
-      setCompressClicked(true);
-      setShowProgressBar(false);
-      setShowResultImages(true);
-      setShowConvertingProgress(true);
-      setShowRightPanel(false);
+      handleCompression();
+    } else {
+      alert("Please select a compression level first");
     }
   };
 
@@ -68,6 +148,7 @@ export default function UploadPage() {
       <div className="flex flex-col lg:flex-row w-full max-w-6xl">
         {/* Main Center Content */}
         <div className="flex-1 flex flex-col items-center w-full">
+          {/* If compression hasn't been triggered, show upload UI */}
           {!showResultImages && (
             <>
               <img
@@ -76,10 +157,11 @@ export default function UploadPage() {
                 className="w-48 h-60 object-contain mb-4"
               />
               <p className="text-sm text-gray-600 mb-2">
-                {fileName} ({fileSize})
+                {fileNameParam} ({fileSizeParam})
               </p>
+              {/* Display either 'Uploading…' or 'Upload Complete' based on the uploadComplete state */}
               <p className="text-xl font-medium text-gray-800 mb-4">
-                Uploading...
+                {uploadComplete ? "Upload Complete" : "Uploading..."}
               </p>
             </>
           )}
@@ -90,12 +172,13 @@ export default function UploadPage() {
                 className="h-full rounded-full transition-all duration-200"
                 style={{
                   width: `${progress}%`,
-                  background: 'linear-gradient(to right, #06044B, #61E987)',
+                  background: "linear-gradient(to right, #06044B, #61E987)",
                 }}
               />
             </div>
           )}
 
+          {/* When compression begins, display the preview and converting progress */}
           {showResultImages && !showWordImage && (
             <>
               <div className="flex items-center justify-center mb-4 w-full">
@@ -124,11 +207,9 @@ export default function UploadPage() {
                   className="w-40 h-52 object-contain"
                 />
               </div>
-
               <p className="text-sm text-gray-600 mb-2">
-                {fileName} ({fileSize})
+                {fileNameParam} ({fileSizeParam})
               </p>
-
               {showConvertingProgress && (
                 <>
                   <p className="text-xl font-medium text-gray-800 mb-2">
@@ -139,7 +220,8 @@ export default function UploadPage() {
                       className="h-full rounded-full transition-all duration-200"
                       style={{
                         width: `${convertingProgress}%`,
-                        background: 'linear-gradient(to right, #06044B, #61E987)',
+                        background:
+                          "linear-gradient(to right, #06044B, #61E987)",
                       }}
                     />
                   </div>
@@ -156,7 +238,7 @@ export default function UploadPage() {
                 className="w-80 h-96 object-contain mt-6"
               />
               <p className="text-sm text-gray-600 mb-2 mt-4">
-                {docxFileName} ({fileSize})
+                {docxFileName} ({fileSizeParam})
               </p>
               <p className="text-xl font-semibold text-black mb-4 text-center">
                 PDFs have been compressed!
@@ -166,17 +248,21 @@ export default function UploadPage() {
         </div>
       </div>
 
-      {/* Compression Options Panel */}
-      {showRightPanel && (
+      {/* Compression Options Panel – Only visible after upload is complete */}
+      {showRightPanel && uploadComplete && (
         <div
           className="lg:absolute top-10 right-0 bottom-0 w-full lg:w-[320px] px-4 py-6 shadow-lg rounded-none flex flex-col"
-          style={{ background: 'linear-gradient(to bottom, #DFFBE7, #CDCDDB)' }}
+          style={{
+            background: "linear-gradient(to bottom, #DFFBE7, #CDCDDB)",
+          }}
         >
-          <p className="text-lg font-semibold mb-4 text-center">Select Compression</p>
+          <p className="text-lg font-semibold mb-4 text-center">
+            Select Compression
+          </p>
 
           {/* Option Boxes */}
           <div className="space-y-3 mb-4 w-full flex flex-col items-center mt-24">
-            {['extreme', 'recommended', 'less'].map((type) => (
+            {["extreme", "recommended", "less"].map((type) => (
               <div key={type} className="w-full bg-white p-4 rounded-md shadow">
                 <label className="block">
                   <input
@@ -186,27 +272,28 @@ export default function UploadPage() {
                     checked={selectedCompression === type}
                     onChange={(e) => setSelectedCompression(e.target.value)}
                   />
-                  <span className="ml-2 font-medium capitalize">{type} Compression</span>
+                  <span className="ml-2 font-medium capitalize">
+                    {type} Compression
+                  </span>
                   <p className="text-sm text-gray-500 ml-6">
-                    {type === 'extreme'
-                      ? 'Less quality, high compression'
-                      : type === 'recommended'
-                      ? 'Good quality, good compression'
-                      : 'High quality, less compression'}
+                    {type === "extreme"
+                      ? "Less quality, high compression"
+                      : type === "recommended"
+                      ? "Good quality, good compression"
+                      : "High quality, less compression"}
                   </p>
                 </label>
               </div>
             ))}
           </div>
 
-          {/* Compress Button */}
+          {/* Compress Button – triggers the API call */}
           <div className="mt-auto pt-4">
             <button
-              className={`w-full border border-[#06044B] text-[#06044B] py-2 rounded-md transition duration-200
-              hover:bg-[#06044B] hover:text-white ${
-                !selectedCompression ? 'opacity-50 cursor-not-allowed' : ''
+              className={`w-full border border-[#06044B] text-[#06044B] py-2 rounded-md transition duration-200 hover:bg-[#06044B] hover:text-white ${
+                (!selectedCompression || !uploadComplete) ? "opacity-50 cursor-not-allowed" : ""
               }`}
-              disabled={!selectedCompression}
+              disabled={!selectedCompression || !uploadComplete}
               onClick={handleCompressClick}
             >
               Compress PDF ➔
@@ -219,24 +306,21 @@ export default function UploadPage() {
       {showWordImage && (
         <div
           className="lg:absolute top-10 right-0 bottom-0 w-full lg:w-[320px] px-4 py-6 shadow-lg rounded-none"
-          style={{ background: 'linear-gradient(to bottom, #DFFBE7, #CDCDDB)' }}
+          style={{
+            background: "linear-gradient(to bottom, #DFFBE7, #CDCDDB)",
+          }}
         >
           <p className="text-lg font-medium mb-4">{docxFileName}</p>
-
           <button className="w-full bg-[#06044B] text-white py-2 rounded-md mb-2 hover:opacity-90">
             ⬇️ DOWNLOAD
           </button>
-
           <p className="text-center text-sm mb-2">or</p>
-
           <button className="w-full bg-[#06044B] text-white py-2 rounded-md mb-3 hover:opacity-90">
             🖨️ Print
           </button>
-
           <button className="w-full border border-[#06044B] py-2 rounded-md mb-3 hover:bg-[#06044B] hover:text-white transition">
             ⬆️ Export As
           </button>
-
           <div className="flex justify-between">
             <button className="w-[48%] border border-[#06044B] py-2 rounded-md hover:bg-[#06044B] hover:text-white transition">
               🔗 Share
