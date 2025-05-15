@@ -25,18 +25,6 @@ export default function PdfCompress() {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    // Validate file type
-    if (!file.type || file.type !== 'application/pdf') {
-      alert('Please select a valid PDF file');
-      return;
-    }
-
-    // Validate file size (50MB)
-    if (file.size > 50 * 1024 * 1024) {
-      alert('File size must be less than 50MB');
-      return;
-    }
-
     setIsLoading(true);
 
     try {
@@ -54,32 +42,35 @@ export default function PdfCompress() {
       }
 
       const blob = await response.blob();
-      
+
       if (!blob.size) {
-        throw new Error('Received empty file from server');
+        throw new Error("Received empty file from server");
       }
 
-      // Create and trigger download
+      // Create a temporary download link for the resulting file
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
       a.download = `compressed-${file.name}`;
       document.body.appendChild(a);
       a.click();
-      
-      // Cleanup
+
       setTimeout(() => {
         document.body.removeChild(a);
         window.URL.revokeObjectURL(url);
       }, 100);
-
     } catch (err) {
       console.error("Compression error:", err);
-      alert(err instanceof Error ? err.message : 'Failed to compress PDF. Please try again.');
+      alert(
+        err instanceof Error
+          ? err.message
+          : "Failed to compress PDF. Please try again."
+      );
     } finally {
       setIsLoading(false);
     }
-  };  
+  };
+   
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
